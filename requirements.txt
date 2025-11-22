@@ -1,0 +1,7 @@
+moderngl-window
+imgui
+moderngl
+Pillow
+numpy
+sounddevice
+requests
