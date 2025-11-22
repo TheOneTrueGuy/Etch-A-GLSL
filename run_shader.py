@@ -169,9 +169,9 @@ class FractalWindow(mglw.WindowConfig):
         # Manual ImGui Integration Setup
         try:
             import imgui
-            from moderngl_window.integrations.imgui import ModernglWindowIntegrator
+            from moderngl_window.integrations.imgui import ModernglWindowRenderer
             imgui.create_context()
-            self.imgui = ModernglWindowIntegrator(self.wnd)
+            self.imgui = ModernglWindowRenderer(self.wnd)
             print("Manual ImGui init successful", flush=True)
         except Exception as e:
             print(f"Manual ImGui init failed: {e}", flush=True)
@@ -233,7 +233,12 @@ class FractalWindow(mglw.WindowConfig):
                     self.params[k] = v
 
     def on_render(self, time: float, frame_time: float):
-        # print("Frame start", flush=True)
+        # Reset standard GL state for the fractal render
+        self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
+        self.ctx.disable(moderngl.DEPTH_TEST)
+        self.ctx.disable(moderngl.CULL_FACE)
+        self.ctx.disable(moderngl.BLEND)
+        
         self.ctx.clear(0.0, 0.0, 0.0)
         
         # Ensure ImGui frame is started via Integrator
@@ -282,19 +287,15 @@ class FractalWindow(mglw.WindowConfig):
 
         # Draw the UI
         try:
-            print("GUI build start", flush=True)
             self.imgui_gui()
-            print("GUI build end", flush=True)
         except Exception as e:
             print(f"GUI Definition error: {e}", flush=True)
 
         # Render UI
         try:
-            print("GUI render start", flush=True)
             imgui.render()
             if self.imgui:
                 self.imgui.render(imgui.get_draw_data())
-            print("GUI render end", flush=True)
         except Exception as e:
             print(f"UI Render error: {e}", flush=True)
 
@@ -427,16 +428,42 @@ class FractalWindow(mglw.WindowConfig):
         imgui.end()
 
     def key_event(self, key, action, modifiers):
+        if self.imgui:
+            self.imgui.key_event(key, action, modifiers)
         super().key_event(key, action, modifiers)
         if action == self.wnd.keys.ACTION_PRESS:
             if key == self.wnd.keys.S:
                 self.take_screenshot()
 
+    def mouse_position_event(self, x, y, dx, dy):
+        if self.imgui:
+            self.imgui.mouse_position_event(x, y, dx, dy)
+
     def mouse_drag_event(self, x, y, dx, dy):
+        if self.imgui:
+            self.imgui.mouse_drag_event(x, y, dx, dy)
+            
         if self.mouse_interaction:
-            # Simple mapping: dx -> rotate, dy -> scale
-            self.params['rot_speed'] += dx * 0.01
-            self.params['scale_factor'] += dy * 0.1
+            # Only rotate if ImGui isn't capturing the mouse
+            if not imgui.get_io().want_capture_mouse:
+                self.params['rot_speed'] += dx * 0.01
+                self.params['scale_factor'] += dy * 0.1
+
+    def mouse_scroll_event(self, x_offset, y_offset):
+        if self.imgui:
+            self.imgui.mouse_scroll_event(x_offset, y_offset)
+
+    def mouse_press_event(self, x, y, button):
+        if self.imgui:
+            self.imgui.mouse_press_event(x, y, button)
+
+    def mouse_release_event(self, x: int, y: int, button: int):
+        if self.imgui:
+            self.imgui.mouse_release_event(x, y, button)
+
+    def unicode_char_entered(self, char):
+        if self.imgui:
+            self.imgui.unicode_char_entered(char)
 
     def take_screenshot(self):
         import datetime
