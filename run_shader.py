@@ -149,7 +149,8 @@ class FractalWindow(mglw.WindowConfig):
             'hue_base': 0.6,
             'scale_factor': 9.0,
             'param_c': [3.0, 4.3, 1.4],
-            'param_d': [3.7, 2.0, 2.0]
+            'param_d': [3.7, 2.0, 2.0],
+            'ui_scale': 1.0
         }
         
         self.mouse_interaction = False
@@ -214,7 +215,7 @@ class FractalWindow(mglw.WindowConfig):
 
     def load_shader(self, shader_path):
         try:
-            frag_source = open(shader_path).read()
+            frag_source = open(shader_path, encoding='utf-8').read()
             self.prog = self.ctx.program(vertex_shader=self.vert_shader, fragment_shader=frag_source)
             self.shader_error = None
             print(f"Loaded shader: {shader_path}")
@@ -249,13 +250,13 @@ class FractalWindow(mglw.WindowConfig):
         self.presets = {}
         if os.path.exists('presets.json'):
             try:
-                with open('presets.json', 'r') as f:
+                with open('presets.json', 'r', encoding='utf-8') as f:
                     self.presets = json.load(f)
             except:
                 print("Failed to load presets.")
 
     def save_presets(self):
-        with open('presets.json', 'w') as f:
+        with open('presets.json', 'w', encoding='utf-8') as f:
             json.dump(self.presets, f, indent=2)
 
     def apply_preset(self, name):
@@ -370,7 +371,7 @@ class FractalWindow(mglw.WindowConfig):
                     # Save to file
                     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
                     filename = f"ai_gen_{timestamp}.glsl"
-                    with open(filename, 'w') as f:
+                    with open(filename, 'w', encoding='utf-8') as f:
                         f.write(glsl_code)
                     
                     self.gen_status = f"Success! Saved {filename}"
@@ -385,9 +386,44 @@ class FractalWindow(mglw.WindowConfig):
         finally:
             self.is_generating = False
 
-    def imgui_gui(self):
+    def update_imgui_style(self, scale):
+        """Updates ImGui style variables to scale controls physically."""
         try:
+            imgui.get_io().font_global_scale = scale
+            style = imgui.get_style()
+            
+            # Scale geometry
+            style.window_padding = (8 * scale, 8 * scale)
+            style.frame_padding = (4 * scale, 3 * scale)
+            style.item_spacing = (8 * scale, 4 * scale)
+            style.item_inner_spacing = (4 * scale, 4 * scale)
+            style.touch_extra_padding = (0 * scale, 0 * scale)
+            style.indent_spacing = 21 * scale
+            style.scrollbar_size = 16 * scale
+            style.grab_min_size = 10 * scale
+            
+            # Scale window title height if possible (not directly exposed in all versions, 
+            # but usually derived from font size + padding)
+            
+        except Exception as e:
+            print(f"Error updating style: {e}")
+
+    def imgui_gui(self):
+        window_started = False
+        try:
+            # Apply UI Scale
+            scale = self.params.get('ui_scale', 1.0)
+            self.update_imgui_style(scale)
+            
+            # Set default size (scaled)
+            # Use integer 4 (imgui.FIRST_USE_EVER) to avoid attribute errors if constants differ
+            imgui.set_next_window_size(450 * scale, 700 * scale, condition=imgui.FIRST_USE_EVER)
+            
             imgui.begin("Etch-A-GLSL Controls")
+            window_started = True
+            
+            _, self.params['ui_scale'] = imgui.slider_float("UI Scale", scale, 0.5, 3.0)
+            imgui.separator()
             
             # AI Generator
             if imgui.collapsing_header("AI Generator", visible=True)[0]:
@@ -468,7 +504,8 @@ class FractalWindow(mglw.WindowConfig):
                         self.save_presets()
 
         finally:
-            imgui.end()
+            if window_started:
+                imgui.end()
 
     def key_event(self, key, action, modifiers):
         if self.imgui:

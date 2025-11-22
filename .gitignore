@@ -1,3 +1,6 @@
 venv/
 __pycache__/
 *.pyc
+.DS_Store
+screenshot_*.png
+ai_gen_*.glsl
