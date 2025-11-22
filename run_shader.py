@@ -281,6 +281,13 @@ class FractalWindow(mglw.WindowConfig):
         try:
              # We still need to start the frame, but let's see if the context is happier now
             import imgui
+            
+            # Force sync mouse buttons to prevent stuck state
+            if self.imgui:
+                self.imgui.io.mouse_down[0] = self.wnd.mouse_states.left
+                self.imgui.io.mouse_down[1] = self.wnd.mouse_states.right
+                self.imgui.io.mouse_down[2] = self.wnd.mouse_states.middle
+            
             imgui.new_frame()
         except Exception as e:
             print(f"new_frame error: {e}", flush=True)
@@ -379,87 +386,89 @@ class FractalWindow(mglw.WindowConfig):
             self.is_generating = False
 
     def imgui_gui(self):
-        imgui.begin("Etch-A-GLSL Controls")
-        
-        # AI Generator
-        if imgui.collapsing_header("AI Generator", visible=True)[0]:
-            _, self.api_key = imgui.input_text("OpenRouter API Key", self.api_key, 256, flags=imgui.INPUT_TEXT_PASSWORD)
+        try:
+            imgui.begin("Etch-A-GLSL Controls")
             
-            imgui.text("Describe your shader:")
-            _, self.user_prompt = imgui.input_text_multiline("##prompt", self.user_prompt, 200)
-            
-            if self.is_generating:
-                imgui.text_colored("Generating... Please wait...", 1.0, 1.0, 0.0)
-            else:
-                if imgui.button("Generate Shader"):
-                    if not self.api_key:
-                        self.gen_status = "Error: API Key required!"
-                    else:
-                        self.is_generating = True
-                        self.gen_status = "Starting..."
-                        threading.Thread(target=self.generate_shader_thread, args=(self.user_prompt, self.api_key), daemon=True).start()
-            
-            if self.gen_status:
-                imgui.text_wrapped(self.gen_status)
+            # AI Generator
+            if imgui.collapsing_header("AI Generator", visible=True)[0]:
+                _, self.api_key = imgui.input_text("OpenRouter API Key", self.api_key, 256, flags=imgui.INPUT_TEXT_PASSWORD)
+                
+                imgui.text("Describe your shader:")
+                _, self.user_prompt = imgui.input_text_multiline("##prompt", self.user_prompt, 200)
+                
+                if self.is_generating:
+                    imgui.text_colored("Generating... Please wait...", 1.0, 1.0, 0.0)
+                else:
+                    if imgui.button("Generate Shader"):
+                        if not self.api_key:
+                            self.gen_status = "Error: API Key required!"
+                        else:
+                            self.is_generating = True
+                            self.gen_status = "Starting..."
+                            threading.Thread(target=self.generate_shader_thread, args=(self.user_prompt, self.api_key), daemon=True).start()
+                
+                if self.gen_status:
+                    imgui.text_wrapped(self.gen_status)
 
-        # Shader Selection
-        if imgui.collapsing_header("Shader Selection", visible=True)[0]:
-            changed, self.current_shader_idx = imgui.combo(
-                "Shader", self.current_shader_idx, self.shader_files
-            )
-            if changed:
-                self.load_shader(self.shader_files[self.current_shader_idx])
-            
-            if imgui.button("Refresh File List"):
-                self.shader_files = sorted(glob.glob("*.glsl"))
-                if self.current_shader_idx >= len(self.shader_files):
-                    self.current_shader_idx = 0
-            
-            if self.shader_error:
-                imgui.text_colored(self.shader_error, 1.0, 0.0, 0.0)
+            # Shader Selection
+            if imgui.collapsing_header("Shader Selection", visible=True)[0]:
+                changed, self.current_shader_idx = imgui.combo(
+                    "Shader", self.current_shader_idx, self.shader_files
+                )
+                if changed:
+                    self.load_shader(self.shader_files[self.current_shader_idx])
+                
+                if imgui.button("Refresh File List"):
+                    self.shader_files = sorted(glob.glob("*.glsl"))
+                    if self.current_shader_idx >= len(self.shader_files):
+                        self.current_shader_idx = 0
+                
+                if self.shader_error:
+                    imgui.text_colored(self.shader_error, 1.0, 0.0, 0.0)
 
-        if imgui.collapsing_header("General Params", visible=True)[0]:
-            _, self.params['rot_speed'] = imgui.slider_float("Rotation Speed", self.params['rot_speed'], 0.0, 2.0)
-            _, self.params['hue_base'] = imgui.slider_float("Base Hue", self.params['hue_base'], 0.0, 1.0)
-            _, self.params['scale_factor'] = imgui.slider_float("Scale Factor", self.params['scale_factor'], 1.0, 20.0)
+            if imgui.collapsing_header("General Params", visible=True)[0]:
+                _, self.params['rot_speed'] = imgui.slider_float("Rotation Speed", self.params['rot_speed'], 0.0, 2.0)
+                _, self.params['hue_base'] = imgui.slider_float("Base Hue", self.params['hue_base'], 0.0, 1.0)
+                _, self.params['scale_factor'] = imgui.slider_float("Scale Factor", self.params['scale_factor'], 1.0, 20.0)
 
-        if imgui.collapsing_header("Fractal DNA", visible=True)[0]:
-            changed_c, new_c = imgui.slider_float3("Param C", *self.params['param_c'])
-            if changed_c: self.params['param_c'] = list(new_c)
-            
-            changed_d, new_d = imgui.slider_float3("Param D", *self.params['param_d'])
-            if changed_d: self.params['param_d'] = list(new_d)
+            if imgui.collapsing_header("Fractal DNA", visible=True)[0]:
+                changed_c, new_c = imgui.slider_float3("Param C", *self.params['param_c'], min_value=0.0, max_value=10.0)
+                if changed_c: self.params['param_c'] = list(new_c)
+                
+                changed_d, new_d = imgui.slider_float3("Param D", *self.params['param_d'], min_value=0.0, max_value=10.0)
+                if changed_d: self.params['param_d'] = list(new_d)
 
-        if imgui.collapsing_header("Interaction", visible=True)[0]:
-            _, self.mouse_interaction = imgui.checkbox("Mouse Interaction (Drag)", self.mouse_interaction)
-            
-            if AUDIO_AVAILABLE:
-                if imgui.button("Disable Audio" if self.audio_enabled else "Enable Audio"):
-                    self.toggle_audio()
-                imgui.same_line()
-                imgui.text(f"Level: {self.audio_level:.2f}")
-            else:
-                imgui.text("Audio library not found.")
+            if imgui.collapsing_header("Interaction", visible=True)[0]:
+                _, self.mouse_interaction = imgui.checkbox("Mouse Interaction (Drag)", self.mouse_interaction)
+                
+                if AUDIO_AVAILABLE:
+                    if imgui.button("Disable Audio" if self.audio_enabled else "Enable Audio"):
+                        self.toggle_audio()
+                    imgui.same_line()
+                    imgui.text(f"Level: {self.audio_level:.2f}")
+                else:
+                    imgui.text("Audio library not found.")
 
-            if imgui.button("Take Screenshot (S)"):
-                self.take_screenshot()
+                if imgui.button("Take Screenshot (S)"):
+                    self.take_screenshot()
 
-        if imgui.collapsing_header("Presets", visible=True)[0]:
-            _, self.preset_name = imgui.input_text("Name", self.preset_name, 64)
-            if imgui.button("Save Preset"):
-                self.presets[self.preset_name] = self.params.copy()
-                self.save_presets()
-            
-            imgui.separator()
-            for name in list(self.presets.keys()):
-                if imgui.button(f"Load: {name}"):
-                    self.apply_preset(name)
-                imgui.same_line()
-                if imgui.button(f"X##{name}"):
-                    del self.presets[name]
+            if imgui.collapsing_header("Presets", visible=True)[0]:
+                _, self.preset_name = imgui.input_text("Name", self.preset_name, 64)
+                if imgui.button("Save Preset"):
+                    self.presets[self.preset_name] = self.params.copy()
                     self.save_presets()
+                
+                imgui.separator()
+                for name in list(self.presets.keys()):
+                    if imgui.button(f"Load: {name}"):
+                        self.apply_preset(name)
+                    imgui.same_line()
+                    if imgui.button(f"X##{name}"):
+                        del self.presets[name]
+                        self.save_presets()
 
-        imgui.end()
+        finally:
+            imgui.end()
 
     def key_event(self, key, action, modifiers):
         if self.imgui:
@@ -485,8 +494,10 @@ class FractalWindow(mglw.WindowConfig):
                 self.params['scale_factor'] += dy * 0.1
 
     def mouse_scroll_event(self, x_offset, y_offset):
+        # Manually handle scroll to avoid attribute error in moderngl-window integration
+        # self.imgui.mouse_scroll_event(x_offset, y_offset)
         if self.imgui:
-            self.imgui.mouse_scroll_event(x_offset, y_offset)
+            self.imgui.io.mouse_wheel = y_offset
 
     def mouse_press_event(self, x, y, button):
         if self.imgui:
