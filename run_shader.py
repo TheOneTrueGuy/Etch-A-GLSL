@@ -173,10 +173,44 @@ class FractalWindow(mglw.WindowConfig):
             imgui.create_context()
             self.imgui = ModernglWindowRenderer(self.wnd)
             print("Manual ImGui init successful", flush=True)
+            
+            # Force-wire Pyglet events if they aren't working
+            if self.wnd.name == 'pyglet':
+                print("Forcing Pyglet event wiring via _window.push_handlers", flush=True)
+                if hasattr(self.wnd, '_window'):
+                    self.wnd._window.push_handlers(self)
         except Exception as e:
-            print(f"Manual ImGui init failed: {e}", flush=True)
+            print(f"Manual ImGui/Event init failed: {e}", flush=True)
 
         print("Init complete", flush=True)
+
+    # --- Pyglet Bridge Methods ---
+    def on_mouse_motion(self, x, y, dx, dy):
+        # Pyglet is Y-up, ImGui is Y-down. Flip Y.
+        self.mouse_position_event(x, self.wnd.height - y, dx, -dy)
+        
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        # Pyglet is Y-up, ImGui is Y-down. Flip Y.
+        self.mouse_drag_event(x, self.wnd.height - y, dx, -dy)
+        self.mouse_position_event(x, self.wnd.height - y, dx, -dy) 
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        self.mouse_press_event(x, self.wnd.height - y, button)
+
+    def on_mouse_release(self, x, y, button, modifiers):
+        self.mouse_release_event(x, self.wnd.height - y, button)
+
+    def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
+        self.mouse_scroll_event(scroll_x, scroll_y)
+
+    def on_key_press(self, symbol, modifiers):
+        self.key_event(symbol, self.wnd.keys.ACTION_PRESS, modifiers)
+
+    def on_key_release(self, symbol, modifiers):
+        self.key_event(symbol, self.wnd.keys.ACTION_RELEASE, modifiers)
+        
+    def on_text(self, text):
+        self.unicode_char_entered(text)
 
     def load_shader(self, shader_path):
         try:
@@ -436,6 +470,7 @@ class FractalWindow(mglw.WindowConfig):
                 self.take_screenshot()
 
     def mouse_position_event(self, x, y, dx, dy):
+        # print(f"Mouse pos: {x}, {y}", flush=True)
         if self.imgui:
             self.imgui.mouse_position_event(x, y, dx, dy)
 
